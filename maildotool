@@ -1,0 +1,344 @@
+#!/bin/sh
+
+DBG_ECHO=0
+USERNAME=""
+PASSWORD=""
+AUTH=$HOME/.maildotool/credentials.conf
+COMANDERS=""
+MSG_LOG=$HOME/.maildotool/receivedmsg.log
+COMMANDS=$HOME/.maildotool/commands.conf
+CMD_VALID_NOTIF="BOTH"
+
+# Latest e-mail received 
+REC_ID=""
+REC_EMAIL=""
+REC_CODE=""
+LOG_IDS=""
+
+
+# function to parse connection credentials, user name, password,
+# allowed email accounts to send commands from,...
+parse_credentials() {
+	
+	# Split function argument into tag_name, tag_value pairs by "=" delimiter
+	var1=$(echo $1 | cut -f1 -d=)
+	var2=$(echo $1 | cut -f2 -d=)
+	
+	case  $var1 in
+	"AuthUser")  
+		if [ ! -z "$var2" -a "$var2" != " " ]; then
+			# Str is not null or space
+			USERNAME=$var2
+		fi          		
+	;;
+	"AuthPass")
+		if [ ! -z "$var2" -a "$var2" != " " ]; then
+			# Str is not null or space
+			PASSWORD=$var2 
+		fi 	    	         
+	;;            
+	"commander")  
+		# check if valid email address (contains "@")
+		case "$var2" in 
+		*@*)
+			# string contains @ symbol so extract the second part after @
+			var3=$(echo $1 | cut -f2 -d@)
+			
+			# check if it contains "." symbol
+			case "$var3" in 
+			*.*)
+				# email looks good so add it to list of email masters
+				COMANDERS="$COMANDERS $var2"
+			;;				
+			esac
+		;;
+		esac
+	;;    
+	"CmdValidNotification")
+		case "$var2" in 
+		*INVALID*)
+			CMD_VALID_NOTIF="INVALID"
+		;;
+		*VALID*)
+			CMD_VALID_NOTIF="VALID"
+		;;
+		*)
+			CMD_VALID_NOTIF="BOTH"
+		;;
+		esac
+	;;      
+	esac 	
+} 
+
+# Function to send email confirmation (execution status)
+send_response(){
+	echo "To: $REC_EMAIL" > /tmp/email.template
+	echo "Subject: Maildotool confirmation" >> /tmp/email.template
+	echo "" >> /tmp/email.template
+	echo "$1" >> /tmp/email.template
+	
+	ssmtp -C $AUTH -F "Maildotool" -au $USERNAME -ap $PASSWORD $REC_EMAIL < /tmp/email.template
+}
+
+# Function to parse content of a received message
+parse_content(){
+	CMD_FOUND=0
+	
+	if [ ${#REC_ID} -gt 1 ] && [ ${#REC_EMAIL} -gt 1 ]
+	then
+		# Id of the email message is not deleted, so this 
+		# message has not been processed yet and email of the sender
+		# is not deleted, so this is an authorized email.
+		
+		if [ $DBG_ECHO -gt 0 ]; then
+			echo ""
+			echo " code: $REC_CODE"	
+			echo " Id: $REC_ID"
+			echo " email: $REC_EMAIL"	
+		fi
+		
+		# split command code to get code and parameters
+		C=0
+		PARAMS=""
+		for word in $REC_CODE
+		do
+			if [ $C -eq 0 ]; then
+				# first word
+				CMD=$word
+			else
+				if [ $C -eq 1 ]; then
+					# second word and we are avoiding leading space
+					PARAMS="$word"
+				else
+				# everything else
+				PARAMS="$PARAMS $word"
+				fi
+			fi
+			C=$((C+1))
+		done 	
+		
+		# check if command is in the commands.conf file
+		while read line ; do 
+			case "$line" in
+			*$CMD*)			
+				# Command code found
+				CMD_FOUND=1
+				
+				#Extract the command string 
+				value=$(echo "$line" | cut -d "=" -f 2)
+					
+				# execute the command
+				if [ ! -z "$PARAMS" -a "$PARAMS" != " " ]; then
+					# PARAMS is not null or space
+					$value "$PARAMS"
+				else
+					$value
+				fi 
+				
+				break	
+			;;			
+			esac	
+		done < $COMMANDS	
+		
+		CUR_TIME=$(date +"%T")
+				
+		if [ $CMD_FOUND -eq 1 ]; then
+			MSG_TEXT="command $value $PARAMS received at $CUR_TIME"
+				
+			if [ $? -eq 0 ]; then
+				MSG_TEXT="$MSG_TEXT succeeded"		
+			else
+				MSG_TEXT="$MSG_TEXT failed"				
+			fi	
+		
+			case "$CMD_VALID_NOTIF" in 			
+			"VALID")
+				# send email confirmation				
+				send_response "$MSG_TEXT"			
+			;;
+			"BOTH")
+				# send email confirmation				
+				send_response "$MSG_TEXT"
+			;;
+			esac
+		else
+			case "$CMD_VALID_NOTIF" in 			
+			"INVALID")
+				# send email confirmation				
+				send_response "Invalid command $REC_CODE"				
+			;;
+			"BOTH")
+				# send email confirmation				
+				send_response "Invalid command $REC_CODE"	
+			;;
+			esac		
+		fi		
+		
+	fi
+}
+
+# Function to check if the currently parsed message is a new one 
+# or already processed
+check_if_new(){
+	if grep -q $REC_ID $MSG_LOG; then
+		# Already processed. Remove it
+		REC_ID=""		
+	else
+		# new id received, so add it to processed ones
+		echo $REC_ID >> $MSG_LOG
+	fi	
+}
+
+# Function to check if the sender email address is in the list 
+# of authorized emails to issue commands.
+check_if_allowed(){
+	case "$COMANDERS" in
+	*$REC_EMAIL*)
+		# email is contained in the list of authorized emails		
+		return
+	;;
+	esac	
+	REC_EMAIL=""
+}
+
+# Function to parse the gmail feed response
+parse_response(){
+	IN="$1"
+	i=1
+	
+	while [ ${#IN} -gt 1 ]
+	do
+		# Split input by ">" symbol to parse the xml tags
+		IN=$(echo "$1" | cut -d ">" -f $i)
+		
+		# Split the string by "<" symbol into tag_name, tag_value pairs
+		value=$(echo "$IN" | cut -d "<" -f 1)
+		tag_name=$(echo "$IN" | cut -d "<" -f 2)
+		
+		case "$tag_name" in 	
+		"/title")
+			REC_CODE="$value"
+		;;		
+		"/summary")
+			# This is message text. We do not need it.			
+		;;
+		"/id")		
+			# Tag contains /id tag end. Expecting 
+			# "tag:gmail.google.com,2004:1573615542667392047" so split 
+			# string by ":" symbol and extract last value. 
+			REC_ID=$(echo "$value" | cut -d ":" -f 3)
+			LOG_IDS="$LOG_IDS $REC_ID"
+			check_if_new
+		;;	
+		"/email")
+			REC_EMAIL=$value
+			check_if_allowed
+			# We have now extracted all we need from the currently parsed 
+			# email into global variables, so we can now process it.
+			parse_content
+		;;			
+		esac
+		
+		# increment index of the section (tag) to check
+		i=$((i+1))
+	done
+}
+
+# Function to clean message log file. if too many old messages are logged, 
+# it will be re-generated so it only contains currently new messages
+clean_msg_log(){
+	C=0
+	# read message log and check for old messages
+	while read id ; do 
+		# check if it is not contained in $LOG_IDS
+		case "$LOG_IDS" in
+		*$id*)
+			# $id found in $LOG_IDS
+		;;
+		*)
+			# $id is not found in $LOG_IDS so increment old msg counter
+			C=$((C+1))
+		;;
+		esac	
+
+	done < $MSG_LOG
+	
+	if [ $C -gt 30 ] ; then
+		# Too many old messages logged. Time to re-generate log.
+		echo "" > $MSG_LOG
+	
+		for id in $LOG_IDS
+		do
+			echo $id >> $MSG_LOG
+		done	
+	fi
+	
+}
+
+print_help(){
+	echo ""
+	echo "Maildotool usage:"
+	echo "  maildotool -h   ..........print help"
+	echo "  maildotool -c   ..........open configuration files"
+	echo "  maildotool -r   ..........reset configuration to defaults"
+	echo "  maildotool      ..........check gmail for commands from authorized email addresses"
+}
+
+
+case  $1 in
+	"-h")       
+		print_help
+		exit 0
+		;;	      
+	"-r")       
+		# reset to defaults
+		rm -fr $HOME/.maildotool/
+		mkdir $HOME/.maildotool
+		cp -f /opt/maildotool/commands.conf $HOME/.maildotool
+		cp -f /opt/maildotool/credentials.conf $HOME/.maildotool	
+		exit 0			
+		;;
+	"-c")       
+		"${EDITOR:-mousepad}" $AUTH 
+		"${EDITOR:-mousepad}" $COMMANDS
+		exit 0	
+		;;
+	*)    
+		case "$1" in 
+			-*) 
+				echo "maildotool error: Invalid switch $1"
+				print_help
+				exit 1
+				;;
+			*)					
+			;;
+		esac			
+	;;         
+esac 
+
+
+# read credentials config file and parse the content
+while read i ; do parse_credentials "$i" ; done < $AUTH
+
+# check if message log exists
+if [ ! -f $MSG_LOG ]
+then		
+	# no log file, so create an empty one
+	echo "" > $MSG_LOG
+fi
+
+# Reading gmail feed
+REPONSE=$(curl -u $USERNAME:$PASSWORD --silent "https://mail.google.com/mail/feed/atom")
+
+if [ $DBG_ECHO -gt 0 ]; then
+	echo "maildotool checking mail"
+	echo "	user: $USERNAME"
+	echo "	pass: $PASSWORD"
+	echo "	comanders: $COMANDERS"
+	echo " response:"
+	echo "$REPONSE"
+	echo ""
+fi
+
+parse_response "$REPONSE"
+clean_msg_log

@@ -1,0 +1,17 @@
+#!/bin/sh
+# postinst script
+
+ln /opt/maildotool/maildotool /usr/bin/maildotool
+ln /opt/maildotool/maildotoold /usr/bin/maildotoold
+ln /opt/maildotool/maildotoold-stop /usr/bin/maildotoold-stop
+
+mkdir $HOME/.maildotool
+cp -f /opt/maildotool/commands.conf $HOME/.maildotool
+cp -f /opt/maildotool/credentials.conf $HOME/.maildotool
+
+maildotool -c
+
+chmod -R 777 $HOME/.maildotool
+chmod -R 777 $HOME/.maildotool/*
+
+exit 0

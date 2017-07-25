@@ -1,0 +1,48 @@
+#!/bin/sh
+
+CMD=maildotool
+
+print_help(){
+	echo ""
+	echo "Maildotool daemon help"
+	echo ""
+	echo " maildotoold runs maildotool in an infinite loop so it kepps checking"
+	echo " the configured email account."
+	echo "Usage:"
+	echo "  maildotoold <time interval to reppeat in minutes>"
+	echo "  To print this help, use maildotoold"
+	echo "  To quit this daemon, execute maildotoold-stop"
+	echo ""
+	exit 0
+}
+
+case $1 in
+    ''|*[!0-9]*) 
+		# argument is Null or non integer
+		print_help
+    ;;
+    *) 
+		INTERVAL=$1
+		INTERVAL=$((INTERVAL * 60))
+    ;;
+esac
+
+if [ $INTERVAL -lt 60 ]; then
+	echo "Interval too low. Please use at least 1"
+	exit 0
+fi
+
+# Infinite loop
+while :
+do
+	#run defined command
+	$CMD &
+	
+	# Get process id 
+	PID=$!
+
+	sleep $INTERVAL
+
+	kill $PID
+
+done

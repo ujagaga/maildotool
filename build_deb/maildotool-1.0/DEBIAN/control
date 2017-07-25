@@ -1,0 +1,16 @@
+Package: maildotool
+Version: 1.0
+Section: base
+Priority: optional
+Architecture: all
+Depends: ssmtp, ca-certificates
+Maintainer: Rada Berar <ujagaga@gmail.com>
+Homepage: 
+Description: Tool to command your computer via gmail
+ Tool to execute commands via gmail. It can read gmail, recognize if sender is
+ authorized to issue commands, recognize the command code and execute a 
+ coresponding command found in configuration file.
+ The goal is to create a cheap and easy way to interface a computer remotely.
+ To configure maildotool just run maildotool -c
+ For help run malidotool -h
+ Also checkout maildotool daemon. Just run maildotoold.

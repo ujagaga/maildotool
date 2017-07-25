@@ -1,0 +1,9 @@
+#!/bin/sh
+# this script runs after the package has been removed
+
+rm -f /usr/bin/maildotool
+rm -f /usr/bin/maildotoold
+rm -f /usr/bin/maildotoold-stop
+rm -fr $HOME/.maildotool/
+
+exit 0

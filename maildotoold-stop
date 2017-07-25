@@ -1,0 +1,6 @@
+#!/bin/sh
+
+echo "Killing all processes named maildotoold"
+killall maildotoold
+echo "Killing all processes named maildotool"
+killall maildotool
