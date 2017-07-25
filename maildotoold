@@ -1,6 +1,9 @@
 #!/bin/sh
 
-CMD=maildotool
+# switch to this scripts folder
+ROOT_DIR="$(dirname "$0")"
+
+CMD=$ROOT_DIR/maildotool
 
 print_help(){
 	echo ""
@@ -31,6 +34,17 @@ if [ $INTERVAL -lt 60 ]; then
 	echo "Interval too low. Please use at least 1"
 	exit 0
 fi
+
+# check if credentials are OK
+# run defined command
+OUTPUT="$($CMD &)"
+
+case $OUTPUT in
+    *"ERROR:"*) 
+		echo "$OUTPUT"
+		exit 1
+    ;;    
+esac
 
 # Infinite loop
 while :

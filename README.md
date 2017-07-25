@@ -12,4 +12,5 @@ to let maildotool open them for you.
 
 There is also a maildotool daemon named maildotolld, which runs maildotool at 
 specified interval. Just execute maildotoold for help
- 
+
+These scripts can be ran without instalation, so the debian package is just a conveniance.

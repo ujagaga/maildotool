@@ -1,12 +1,38 @@
 #!/bin/sh
 
+# switch to this scripts folder
+ROOT_DIR="$(dirname "$0")"
+
+AUTH=$ROOT_DIR/credentials.conf
+COMMANDS=$ROOT_DIR/commands.conf
+
+# check_config_files
+if [ ! -f $AUTH ] || [ ! -f $COMMANDS ]
+then		
+	# one or both of the config files are not present
+	ROOT_DIR=$HOME/.maildotool
+	
+	AUTH=$ROOT_DIR/credentials.conf
+	COMMANDS=$ROOT_DIR/commands.conf
+
+	# check_config_files again
+	if [ ! -f $AUTH ] || [ ! -f $COMMANDS ]
+	then		
+		# one or both of the config files are not present
+		echo " No config files detected in either:"
+		echo " $(dirname "$0") or" 
+		echo " $HOME/.maildotool/" 
+		echo " Please re-install"
+		exit 1
+	fi
+fi
+
+MSG_LOG=$ROOT_DIR/receivedmsg.log
+
 DBG_ECHO=0
 USERNAME=""
 PASSWORD=""
-AUTH=$HOME/.maildotool/credentials.conf
 COMANDERS=""
-MSG_LOG=$HOME/.maildotool/receivedmsg.log
-COMMANDS=$HOME/.maildotool/commands.conf
 CMD_VALID_NOTIF="BOTH"
 
 # Latest e-mail received 
@@ -14,7 +40,6 @@ REC_ID=""
 REC_EMAIL=""
 REC_CODE=""
 LOG_IDS=""
-
 
 # function to parse connection credentials, user name, password,
 # allowed email accounts to send commands from,...
@@ -339,6 +364,15 @@ if [ $DBG_ECHO -gt 0 ]; then
 	echo "$REPONSE"
 	echo ""
 fi
+
+case "$REPONSE" in
+*"<TITLE>Unauthorized</TITLE>"*)
+	echo "maildotool ERROR: bad credentials:"
+	echo "AuthUser: $USERNAME"
+	echo "AuthPass: $PASSWORD"
+	exit 1  
+;;
+esac
 
 parse_response "$REPONSE"
 clean_msg_log
